@@ -118,23 +118,79 @@ def uniform(ria):
     known_spies = suspects
     return (known_spies, ria)
 
+def approach3(ria):
+    """
+    Track which indices have been tested in groups
+    """
+    known_spies = set()
+    suspects = set(range(ria.N))
+    exonerated = set()
+    pools = []
+
+    while len(known_spies) < ria.K:
+        assert(len(suspects & known_spies) == 0)
+        assert(len(suspects & exonerated) == 0)
+        assert(len(known_spies & exonerated) == 0)
+        assert(len(suspects) + len(known_spies) + len(exonerated) == ria.N)
+
+        pool_size = max(1, pool_size_weighted(len(suspects), ria.K - len(known_spies)))
+        candidates = set(np.random.choice(list(suspects), size=(pool_size)))
+
+        meeting, ria = ria.go_on_retreat((suspects | known_spies) - candidates)
+        if meeting:
+            suspects -= candidates
+            exonerated |= candidates
+            assert(len(candidates & ria.spy_indices) == 0)
+        else:
+            pools.append(candidates)
+            assert(len(candidates & ria.spy_indices) > 0)
+
+        for pool in pools:
+            pool_suspects = pool & suspects
+            if len(pool_suspects) == 1 and len(pool & known_spies) == 0:
+                assert(pool_suspects <= ria.spy_indices)
+                suspects -= pool_suspects
+                known_spies |= pool_suspects
+        # filter out pools without suspects
+        pools = [p for p in pools if len(p & suspects) > 0]
+        # filter out pools with known spies
+        pools = [p for p in pools if len(p & known_spies) == 0]
+
+    return (known_spies, ria)
 
 def main():
     ria = Ria()
-    naive_deduced, naive_ria = naive(ria)
-    uniform_deduced, uniform_ria = uniform(ria)
+    print('actual spies: {}'.format(ria.spy_indices))
 
+    naive_deduced, naive_ria = naive(ria)
     print('naive')
     print('  retreats: {}'.format(naive_ria.retreats))
     print('  cost: {}'.format(naive_ria.cost))
     print('  spies not found: {}'.format(set(ria.spy_indices - naive_deduced)))
     print('  falsely accused: {}'.format(naive_deduced - ria.spy_indices))
 
+    uniform_deduced, uniform_ria = uniform(ria)
     print('uniform')
     print('  retreats: {}'.format(uniform_ria.retreats))
     print('  cost: {}'.format(uniform_ria.cost))
     print('  spies not found: {}'.format(set(ria.spy_indices - uniform_deduced)))
     print('  falsely accused: {}'.format(uniform_deduced - ria.spy_indices))
+
+    approach3_deduced, approach3_ria = approach3(ria)
+    print('approach3')
+    print('  retreats: {}'.format(approach3_ria.retreats))
+    print('  cost: {}'.format(approach3_ria.cost))
+    print('  spies not found: {}'.format(set(ria.spy_indices - approach3_deduced)))
+    print('  falsely accused: {}'.format(approach3_deduced - ria.spy_indices))
+
+    rias = []
+    for i in range(1000):
+        approach3_deduced, approach3_ria = approach3(ria)
+        assert(approach3_deduced == ria.spy_indices)
+        rias.append(approach3_ria)
+    print('max retreat count: {}'.format(np.array(list(map(lambda r: r.retreats, rias))).max()))
+    print('avg retreat count: {}'.format(np.array(list(map(lambda r: r.retreats, rias))).mean()))
+    print('avg total attendee count: {}'.format(np.array(list(map(lambda r: r.attendee_count, rias))).mean()))
 
 if __name__ == "__main__":
     if args.test:
